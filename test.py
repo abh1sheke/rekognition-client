@@ -1,8 +1,6 @@
-from mailcap import findmatch
 import boto3
 import io
 from PIL import Image
-import os
 
 
 class FaceRecognition:
