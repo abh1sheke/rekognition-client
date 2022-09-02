@@ -4,6 +4,7 @@
 
 # Ignoring media files
 /media/
+/dest/
 
 # Ignoring .env file
 .env
