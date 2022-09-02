@@ -1,0 +1,10 @@
+# Ignoring pycache files
+*/__pycache__/
+*.pyc
+
+# Ignoring media files
+/media/
+
+# Ignoring .env file
+.env
+.env.local
