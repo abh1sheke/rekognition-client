@@ -3,22 +3,35 @@ import io
 from PIL import Image
 
 
+# Variable Description
+# imagePath - Path to folder that holds the image
+# detectBucket - S3 bucket to temporarily store the image to be detected
+# searchBucket - S3 bucket containing reference collection
+# tableName - DynamoDB Table name to reference (table that contains searchBucket info)
+# destinationFolder - Folder used to store matched faces
+
 class FaceRecognition:
-    def __init__(self, filename, imagePath, detectBucket, searchBucket, tableName, destination_folder) -> None:
+    def __init__(self, filename, imagePath, detectBucket, searchBucket, tableName, destinationFolder) -> None:
         self.filename = filename
         self.imagePath = imagePath
-        self.image = Image.open(imagePath)
+
+        # Saving image in RGB format
+        self.image = Image.open(f'{imagePath}/{filename}')
         self.image = self.image.convert('RGB')
         self.detectBucket = detectBucket
         self.searchBucket = searchBucket
         self.tableName = tableName
-        self.destination_folder = destination_folder
+        self.destinationFolder = destinationFolder
 
     def detectFaces(self):
+        # Temporarily storing provided image
         s3 = boto3.resource('s3')
         file = open(self.imagePath, 'rb')
         object = s3.Object(self.detectBucket, self.filename)
-        ret = object.put(Body=file, Metadata={'filename': self.filename})
+        insert_image = object.put(
+            Body=file, Metadata={'filename': self.filename})
+
+        # Detecting all faces in provided image
         rekognition = boto3.client(
             'rekognition', region_name='ap-south-1')
         response = rekognition.detect_faces(
@@ -31,6 +44,7 @@ class FaceRecognition:
         )
         width, height = self.image.size
         images = []
+        # Storing faces in a list
         for face in response['FaceDetails']:
             if face['Confidence'] > 90:
                 box = face['BoundingBox']
@@ -43,10 +57,12 @@ class FaceRecognition:
         return images
 
     def findMatches(self, face, key):
+        # Getting image as bytes
         stream = io.BytesIO()
         face.save(stream, format='JPEG')
         imageBinary = stream.getvalue()
 
+        # Cross referencing DynamoDB and reference collection
         dynamodb = boto3.client('dynamodb', region_name='ap-south-1')
         rekognition = boto3.client(
             'rekognition', region_name='ap-south-1')
@@ -57,6 +73,7 @@ class FaceRecognition:
             }
         )
 
+        # Returning all matches
         for match in response['FaceMatches']:
             face_key = dynamodb.get_item(
                 TableName=self.tableName,
@@ -65,22 +82,7 @@ class FaceRecognition:
                 }
             )
             if 'Item' in face_key:
-                face.save(f'{self.destination_folder}/images/{key}{self.filename}', format='JPEG')
+                face.save(
+                    f'{self.destinationFolder}/images/{key}{self.filename}', format='JPEG')
                 return {'Match': match, 'FaceId': face_key, 'MatchFile': f'{key}{self.filename}'}
         return None
-
-
-if __name__ == '__main__':
-    faceRec = FaceRecognition(
-        filename='102859427-pewdiepieez.jpg',
-        imagePath='./media/102859427-pewdiepie.jpg',
-        detectBucket='detect-face',
-        searchBucket='blrpd-frs-demo',
-        tableName='blrpd-frs-demo'
-    )
-    images = faceRec.detectFaces()
-    matches = []
-    for image in images:
-        match = faceRec.findMatches(image)
-        if match != None:
-            matches.append(match)
