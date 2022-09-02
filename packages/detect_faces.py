@@ -26,7 +26,7 @@ class FaceRecognition:
     def detectFaces(self):
         # Temporarily storing provided image
         s3 = boto3.resource('s3')
-        file = open(self.imagePath, 'rb')
+        file = open(f'{self.imagePath}/{self.filename}', 'rb')
         object = s3.Object(self.detectBucket, self.filename)
         insert_image = object.put(
             Body=file, Metadata={'filename': self.filename})
@@ -66,23 +66,26 @@ class FaceRecognition:
         dynamodb = boto3.client('dynamodb', region_name='ap-south-1')
         rekognition = boto3.client(
             'rekognition', region_name='ap-south-1')
-        response = rekognition.search_faces_by_image(
-            CollectionId=self.searchBucket,
-            Image={
-                'Bytes': imageBinary
-            }
-        )
-
-        # Returning all matches
-        for match in response['FaceMatches']:
-            face_key = dynamodb.get_item(
-                TableName=self.tableName,
-                Key={
-                    'RekognitionId': {'S': match['Face']['FaceId']}
+        try:
+            response = rekognition.search_faces_by_image(
+                CollectionId=self.searchBucket,
+                Image={
+                    'Bytes': imageBinary
                 }
             )
-            if 'Item' in face_key:
-                face.save(
-                    f'{self.destinationFolder}/images/{key}{self.filename}', format='JPEG')
-                return {'Match': match, 'FaceId': face_key, 'MatchFile': f'{key}{self.filename}'}
+            for match in response['FaceMatches']:
+                face_key = dynamodb.get_item(
+                    TableName=self.tableName,
+                    Key={
+                        'RekognitionId': {'S': match['Face']['FaceId']}
+                    }
+                )
+                if 'Item' in face_key:
+                    face.save(
+                        f'{self.destinationFolder}/{key}{self.filename}', format='JPEG')
+                    return {'Match': match, 'FaceId': face_key, 'MatchFile': f'{key}{self.filename}'}
+        except:
+            print('An error occured.')
+
+        # Returning all matches
         return None
